@@ -1,0 +1,43 @@
+{
+  "name": "gitty",
+  "version": "1.0.0",
+  "description": "😸 Backup all your git repos with a single command!",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "gt": "node index.js",
+    "gitty": "node index.js",
+    "repo_backup": "node index.js"
+  },
+  "scripts": {
+    "dev": "node index.js",
+    "build": "rm -rf gitty* && esbuild index.js --bundle --outfile=build.cjs --format=cjs --platform=node && pkg -t node16-linux,node16-win,node16-macos-x64,node16-macos-arm64 build.cjs -C GZip -o gitty && rm -rf build.cjs index test test.cjs"
+  },
+  "keywords": [
+    "git",
+    "backup",
+    "code",
+    "github",
+    "gitty"
+  ],
+  "author": "Explosion-Scratch",
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "^0.17.15",
+    "pkg": "^5.8.1"
+  },
+  "dependencies": {
+    "colors": "^1.4.0",
+    "execa": "^7.1.1",
+    "inquirer": "^9.1.5",
+    "inquirer-press-to-continue": "^1.1.4",
+    "isomorphic-fetch": "^3.0.0",
+    "log-update": "^5.0.1",
+    "minimist": "^1.2.8",
+    "ora": "^6.3.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/explosion-scratch/gitty"
+  }
+}
