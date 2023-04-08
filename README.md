@@ -1,3 +1,7 @@
+**Whoops, `gitty` was already taken on NPM, I thought I checked. Name change will be coming soon lol**
+
+
+
 <div align=center><h1>🐾 Gitty</h1></div>
 
 <center>😸 <i>Backup all your git repos with a single command!</i></center><br><br>
