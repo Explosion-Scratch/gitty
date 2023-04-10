@@ -13,6 +13,7 @@ const BLACKLIST = [
     "etc",
     "xcuserdata",
     "logs",
+    ".Trash",
 ];
 const HOME_BLACKLIST = [
     ...BLACKLIST,
