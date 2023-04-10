@@ -17,25 +17,27 @@ ${"Usage:".bold.white} backup_all_repos [options]
 ${"Options:".bold.white}
     ${"--help".bold.white}               ${`Show this message`.italic.dim}
     ${"--username".bold.white}           ${`Username (skips API check for username if provided)`.italic.dim
-    }
+}
     ${"--email".bold.white}              ${`Email address (used instead of "git config --get user.email" if provided)`
         .italic.dim
-    }
+}
     ${"--dir".bold.white}                ${`Directory to backup to (defaults to ${HOME_DIR.bold.white.reset}${")".italic.dim
         }`.italic.dim
-    }
+}
     ${"--no-exclude".bold.white}         ${`Don't exclude folders such as ~/Library, ~/.cache, .git, etc.`.italic.dim
-    }
+}
     ${"--find-orphans".bold.white}       ${`Find any repos that don't have a remote URL.`.italic.dim
-    }
+}
     ${"--output".bold.white}             ${`Give the output in JSON, plain text or readable format. (json|plain|readable).`
         .italic.dim
+}
+    ${"--mine-only".bold.white}          ${`Only show repos owned by me`.italic.dim
     }
-    ${"--mine-only".bold.white}          ${`Only show repos owned by me`.italic.dim}
-    ${"--not-mine".bold.white}           ${`Only show repos NOT owned by me`.italic.dim}
+    ${"--not-mine".bold.white}           ${`Only show repos NOT owned by me`.italic.dim
+}
 
 ${`Give it a ⭐️ on GitHub if you want!`.yellow}${" - ".dim}${"@Explosion-Scratch/gitty".bold.blue
-    }
+}
 `.trim();
 
 inquirer.registerPrompt("press-to-continue", PressToContinuePrompt);
@@ -71,216 +73,237 @@ async function main() {
         ];
         delete args["_"];
         if (!Object.keys(args).every((i) => recognizedOptions.includes(i))) {
-            error(`Unrecognized option ${Object.keys(args)
+        error(
+            `Unrecognized option ${Object.keys(args)
                 .filter((i) => !recognizedOptions.includes(i))
                 .map((i) => `--${i}=${JSON.stringify(args[i])}`)
-                .join(", ")}`);
-        }
-        if (args.output && !(args["find-orphans"] || args["mine-only"] || args["not-mine"])) {
-            error(`Output cannot be used without specifying one of --find-orphans, --mine-only, or --not-mine`);
-        }
-        if (!args.output) {
-            args.output = "readable";
-        }
-        if (!["plain", "json", "readable"].includes(args.output)) {
-            error(`Output format must be one of 'json', 'plain', or 'readable'`);
-        }
-        if (args.help === true) {
-            log(HELP);
-            process.exit(0);
-        }
-        if (args.exclude === undefined) {
-            args.exclude = true;
-        }
-        const stdout = args.username
-            ? null
-            : args.email
-                ? args.email
-                : await execa("git", ["config", "--get", "user.email"]);
-        if (!stdout?.stdout && !args.username) {
-            error(`No email found`)
-        }
-        const email = stdout?.stdout;
-        const username =
-            args.username ||
-            (await fetch(
-                `https://api.github.com/search/users?q=${encodeURIComponent(email)}`
-            )
-                .then((r) => r.json())
-                .then((r) => r?.items[0]?.login));
-        if (!username) {
-            error(`No username found`)
-            process.exit(1);
-        }
-        log("Found username: ".green.bold + username.white.bold.underline);
-        const dir = args.dir ? path.resolve(args.dir) : HOME_DIR;
-        const spinner = ora("Finding github repos...").start();
-        const repos = await findGithubRepos(dir, true, args.exclude).then(
-            async (repos) => {
-                spinner.stop();
-                const load = ora("Checking status of repos...").start();
-                let out = await Promise.all(
-                    repos.map(async (i) => {
-                        const { clean, output } = await isClean(i);
-                        const url = await getUrl(i);
-                        return { repo: i, clean, output, url };
-                    })
-                ).then((a) =>
-                    a
-                        .filter((i) => (args["find-orphans"] || args["not-mine"] || args["mine-only"]) ? true : !i.clean)
-                        .filter((i) => (args["find-orphans"] ? !i.url : i.url))
-                        .map((i) => [
-                            i.repo,
-                            i.output.split("\n").map((i) => i.trim()),
-                            i.url,
-                        ])
-                        .sort((a, b) => b[1].length - a[1].length)
-                        .map((i) => [
-                            i[0],
-                            `${i[1].length} changed file${i[1].length > 1 ? "s" : ""}`,
-                            i[2].split("/").slice(-2).join("/"),
-                        ])
-                        .filter((i) => {
-                            if (!(args["not-mine"] || args["mine-only"])) { return true }
-                            if (args["not-mine"] && args["mine-only"]) {
-                                error(`Arguments --not-mine and --mine-only can't be used together.`);
-                            }
-                            if (args["find-orphans"]) {
-                                error(`Error: Arguments --find-orphans and --(not-mine|mine-only) can't be used together, as --(not-mine|mine-only) depends on repos with a remote URL.`);
-                            }
-                            // Get a string like "Explosion-Scratch/blog"
-                            const repoString = getUsername(i, true);
-                            const repoUsername = repoString?.split("/")[0];
-                            const out = repoUsername.toLowerCase() === username.toLowerCase();
-                            return args["mine-only"] ? out : !out;
-                        })
-                );
-                load.stop();
-                return out;
-            }
-        );
-        const longestRepoName = repos.reduce(
-            (a, b) => Math.max(a, b[0].split(path.sep).slice(-1)[0].length),
-            0
-        );
-        const longestPath = repos.reduce((a, b) => Math.max(a, b[0].length), 0);
-        if (args["find-orphans"] || args["not-mine"] || args["mine-only"]) {
-            console.clear();
-            switch (args.output) {
-                case "plain":
-                    console.log(repos.map((i) => i[0]).join("\n"));
-                    break;
-                case "json":
-                    console.log(JSON.stringify(formatRepos(repos), null, 2));
-                    break;
-                case "readable":
-                    const message = args["find-orphans"] ? "Orphaned repos (with no origin URL)" : args["not-mine"] ? `Repos not owned by ${username}` : args["mine-only"] ? `Repos owned by ${username}` : `This message should never show up`;
-                    console.log(message.bold.green.underline);
-                    console.log(
-                        repos
-                            .map(
-                                (i) =>
-                                    `${i[0].padEnd(longestPath + 7, " ").bold.blue} ${`(${i[1]})`.dim.italic
-                                    }${getUsername(i) ? ' - ' + getUsername(i) : ""}`
-                            )
-                            .join("\n")
+              .join(", ")}`
+      );
+    }
+      if (
+          args.output &&
+          !(args["find-orphans"] || args["mine-only"] || args["not-mine"])
+      ) {
+          error(
+              `Output cannot be used without specifying one of --find-orphans, --mine-only, or --not-mine`
+          );
+      }
+      if (!args.output) {
+          args.output = "readable";
+      }
+      if (!["plain", "json", "readable"].includes(args.output)) {
+          error(`Output format must be one of 'json', 'plain', or 'readable'`);
+      }
+      if (args.help === true) {
+          log(HELP);
+          process.exit(0);
+      }
+      if (args.exclude === undefined) {
+          args.exclude = true;
+      }
+      const stdout = args.username
+          ? null
+          : args.email
+              ? args.email
+              : await execa("git", ["config", "--get", "user.email"]);
+      if (!stdout?.stdout && !args.username) {
+          error(`No email found`);
+      }
+      const email = stdout?.stdout;
+      const username =
+          args.username ||
+          (await fetch(
+              `https://api.github.com/search/users?q=${encodeURIComponent(email)}`
+          )
+              .then((r) => r.json())
+              .then((r) => r?.items[0]?.login));
+      if (!username) {
+          error(`No username found`);
+          process.exit(1);
+      }
+      log("Found username: ".green.bold + username.white.bold.underline);
+      const dir = args.dir ? path.resolve(args.dir) : HOME_DIR;
+      const spinner = ora("Finding github repos...").start();
+      const repos = await findGithubRepos(dir, true, args.exclude).then(
+          async (repos) => {
+              spinner.stop();
+              const load = ora("Checking status of repos...").start();
+              let out = await Promise.all(
+                  repos.map(async (i) => {
+                      const { clean, output } = await isClean(i);
+                      const url = await getUrl(i);
+                      return { repo: i, clean, output, url };
+                  })
+              ).then((a) =>
+                  a
+                .filter((i) =>
+                    args["find-orphans"] || args["not-mine"] || args["mine-only"]
+                        ? true
+                        : !i.clean
+                )
+                .filter((i) => (args["find-orphans"] ? !i.url : i.url))
+                .map((i) => [
+                    i.repo,
+                    i.output.split("\n").map((i) => i.trim()),
+                    i.url,
+                ])
+                .sort((a, b) => b[1].length - a[1].length)
+                .map((i) => [
+                    i[0],
+                    `${i[1].length} changed file${i[1].length > 1 ? "s" : ""}`,
+                    i[2].split("/").slice(-2).join("/"),
+                ])
+                .filter((i) => {
+                if (!(args["not-mine"] || args["mine-only"])) {
+                    return true;
+                }
+                if (args["not-mine"] && args["mine-only"]) {
+                    error(
+                        `Arguments --not-mine and --mine-only can't be used together.`
                     );
-                    break;
-                default:
-                    console.error("Unexpected output format.");
-                    process.exit(1);
-            }
-            process.exit(0);
+                }
+                if (args["find-orphans"]) {
+                    error(
+                        `Error: Arguments --find-orphans and --(not-mine|mine-only) can't be used together, as --(not-mine|mine-only) depends on repos with a remote URL.`
+                    );
+                }
+                // Get a string like "Explosion-Scratch/blog"
+                const repoString = getUsername(i, true);
+                const repoUsername = repoString?.split("/")[0];
+                const out = repoUsername.toLowerCase() === username.toLowerCase();
+                return args["mine-only"] ? out : !out;
+            })
+        );
+            load.stop();
+            return out;
         }
-        if (repos.length === 0) {
-            log("No github repos found.");
-            process.exit(0);
-        }
-        const choices = repos.map((repo) => ({
-            name: `${repo[0]
-                .split(path.sep)
-                .slice(-1)[0]
-                .bold.padEnd(longestRepoName + 10, " ")}${` - ${repo[1].italic} (${niceslice(
-                    repo[0].replace(process.env.HOME, "~"),
-                    Math.floor(process.stdout.columns / 4)
-                )} - ${repo[2].split("/")[0].toLowerCase() === username.toLowerCase()
+    );
+      const longestRepoName = repos.reduce(
+          (a, b) => Math.max(a, b[0].split(path.sep).slice(-1)[0].length),
+          0
+      );
+      const longestPath = repos.reduce((a, b) => Math.max(a, b[0].length), 0);
+      if (args["find-orphans"] || args["not-mine"] || args["mine-only"]) {
+          console.clear();
+          switch (args.output) {
+              case "plain":
+                  console.log(repos.map((i) => i[0]).join("\n"));
+                  break;
+              case "json":
+                  console.log(JSON.stringify(formatRepos(repos), null, 2));
+                  break;
+              case "readable":
+              const message = args["find-orphans"]
+                  ? "Orphaned repos (with no origin URL)"
+                  : args["not-mine"]
+                      ? `Repos not owned by ${username}`
+                      : args["mine-only"]
+                          ? `Repos owned by ${username}`
+                          : `This message should never show up`;
+              console.log(message.bold.green.underline);
+              console.log(
+                  repos
+                      .map(
+                          (i) =>
+                      `${i[0].padEnd(longestPath + 7, " ").bold.blue} ${`(${i[1]})`.dim.italic
+                      }${getUsername(i) ? " - " + getUsername(i) : ""}`
+              )
+                  .join("\n")
+          );
+                  break;
+              default:
+                  console.error("Unexpected output format.");
+                  process.exit(1);
+          }
+          process.exit(0);
+      }
+      if (repos.length === 0) {
+          log("No github repos found.");
+          process.exit(0);
+      }
+      const choices = repos.map((repo) => ({
+          name: `${repo[0]
+              .split(path.sep)
+              .slice(-1)[0]
+            .bold.padEnd(longestRepoName + 10, " ")}${` - ${repo[1].italic} (${niceslice(
+                repo[0].replace(process.env.HOME, "~"),
+                Math.floor(process.stdout.columns / 4)
+            )} - ${repo[2].split("/")[0].toLowerCase() === username.toLowerCase()
                     ? repo[2].split("/")[0]
                     : repo[2].split("/")[0].bold.blue.reset
-                    }${("/" + repo[2].split("/")[1]).dim + ")"}`.dim
-                }`,
-            value: repo,
-            checked: false,
-        }));
-        const selectedRepos = await inquirer
-            .prompt([
-                {
-                    loop: false,
-                    type: "checkbox",
-                    name: "selectedRepos",
-                    message: "Select the repos you want to backup:",
-                    choices,
-                },
-                {
-                    name: "key",
-                    type: "press-to-continue",
-                    key: "y",
-                    pressToContinueMessage: `Press ${"<y>".blue.bold
-                        } to continue. This will stage, commit and push all repos you selected.`,
-                },
-            ])
-            .then((a) => a.selectedRepos.map((i) => i[0]));
-        if (selectedRepos.length === 0) {
-            log("No repos selected.".red.bold);
-            process.exit(0);
+                }${("/" + repo[2].split("/")[1]).dim + ")"}`.dim
+            }`,
+        value: repo,
+        checked: false,
+    }));
+      const selectedRepos = await inquirer
+          .prompt([
+              {
+                  loop: false,
+                  type: "checkbox",
+                  name: "selectedRepos",
+                  message: "Select the repos you want to backup:",
+                  choices,
+              },
+              {
+                  name: "key",
+                  type: "press-to-continue",
+                  key: "y",
+              pressToContinueMessage: `Press ${"<y>".blue.bold
+                  } to continue. This will stage, commit and push all repos you selected.`,
+          },
+      ])
+          .then((a) => a.selectedRepos.map((i) => i[0]));
+      if (selectedRepos.length === 0) {
+          log("No repos selected.".red.bold);
+          process.exit(0);
+      }
+      log("Starting backup...".yellow);
+      let prev = "";
+      for (let repo of selectedRepos) {
+          console.clear();
+          logUpdate(
+              `${prev ? prev + "\n\n" : ""}Backing up repo: ${repo
+                  .split(path.sep)
+                  .slice(-2)
+                  .join("/")}`.italic
+          );
+          const result = await backupRepo(repo);
+          if (result) {
+              prev = `✅ Backup successful for ${repo}`.green.bold;
+          } else {
+              prev = `🛑 Backup failed for ${repo}`.red.bold;
+          }
+      }
+      logUpdate("Backup finished.".green);
+      function formatRepos(repos) {
+          // JSON format repos
+          return repos.map((i) => ({
+              path: i[0],
+              filesChanged: parseInt(i[1].split(" ")[0], 10),
+              url: i[2],
+          }));
+      }
+      function getUsername(repo, raw) {
+        if (raw) {
+            return repo[2];
         }
-        log("Starting backup...".yellow);
-        let prev = "";
-        for (let repo of selectedRepos) {
-            console.clear();
-            logUpdate(
-                `${prev ? prev + "\n\n" : ""}Backing up repo: ${repo
-                    .split(path.sep)
-                    .slice(-2)
-                    .join("/")}`.italic
-            );
-            const result = await backupRepo(repo);
-            if (result) {
-                prev = `✅ Backup successful for ${repo}`.green.bold;
-            } else {
-                prev = `🛑 Backup failed for ${repo}`.red.bold;
-            }
+        if (!repo[2]?.length) {
+            return false;
         }
-        logUpdate("Backup finished.".green);
-        function formatRepos(repos) {
-            // JSON format repos
-            return repos.map((i) => ({
-                path: i[0],
-                filesChanged: parseInt(i[1].split(" ")[0], 10),
-                url: i[2],
-            }));
-        }
-        function getUsername(repo, raw) {
-            if (raw) { return repo[2] }
-            if (!repo[2]?.length) {
-                return false;
-            }
-            return `${repo[2].split("/")[0].toLowerCase() === username.toLowerCase()
-                ? repo[2].split("/")[0]
-                : repo[2].split("/")[0].bold.blue.reset
-                }${("/" + repo[2].split("/")[1]).dim}`;
-        }
-        function error(message) {
-            console.clear();
-            log(
-                `${`Error: ${message}`
-                    .red.bold
-                }\n\n${HELP}`
-            );
-            process.exit(1);
-        }
-    } catch (error) {
-        console.error(error.message);
-    }
+          return `${repo[2].split("/")[0].toLowerCase() === username.toLowerCase()
+                  ? repo[2].split("/")[0]
+                  : repo[2].split("/")[0].bold.blue.reset
+              }${("/" + repo[2].split("/")[1]).dim}`;
+      }
+      function error(message) {
+          console.clear();
+          log(`${`Error: ${message}`.red.bold}\n\n${HELP}`);
+          process.exit(1);
+      }
+  } catch (error) {
+      console.error(error.message);
+  }
 }
 
 async function isClean(path) {
