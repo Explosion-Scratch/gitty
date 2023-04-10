@@ -9,9 +9,8 @@ import logUpdate from "log-update";
 const HOME_DIR = process.env.HOME || process.env.USERPROFILE;
 import "isomorphic-fetch";
 import PressToContinuePrompt from "inquirer-press-to-continue";
-import { error } from "console";
 
-const HELP = `
+let HELP = `
 ${"Usage:".bold.white} backup_all_repos [options]
 
 ${"Options:".bold.white}
@@ -32,8 +31,14 @@ ${"Options:".bold.white}
         .italic.dim
 }
     ${"--mine-only".bold.white}          ${`Only show repos owned by me`.italic.dim
-    }
+}
     ${"--not-mine".bold.white}           ${`Only show repos NOT owned by me`.italic.dim
+    }
+    ${"--omit-submodules".bold.white}    ${`Don't search for submodules in repos`.italic.dim
+    }
+    ${"--all".bold.white}                ${`Just list all repos found`.italic.dim
+    }
+    ${"--quiet".bold.white}             ${`Don't log anything except the output`.italic.dim
 }
 
 ${`Give it a ⭐️ on GitHub if you want!`.yellow}${" - ".dim}${"@Explosion-Scratch/gitty".bold.blue
@@ -53,40 +58,52 @@ async function backupRepo(repo) {
     }
 }
 
-function log(message) {
-    console.log(message);
-}
-
 async function main() {
     try {
         const args = minimist(process.argv.slice(2));
-        const recognizedOptions = [
-            "exclude",
-            "dir",
-            "username",
-            "email",
-            "help",
-            "find-orphans",
-            "output",
-            "not-mine",
-            "mine-only",
-        ];
-        delete args["_"];
-        if (!Object.keys(args).every((i) => recognizedOptions.includes(i))) {
-        error(
-            `Unrecognized option ${Object.keys(args)
-                .filter((i) => !recognizedOptions.includes(i))
-                .map((i) => `--${i}=${JSON.stringify(args[i])}`)
-              .join(", ")}`
+      if (args["quiet"]) {
+          HELP = "";
+      }
+      const recognizedOptions = [
+          "exclude",
+          "dir",
+          "username",
+          "email",
+          "help",
+          "find-orphans",
+          "output",
+          "not-mine",
+          "mine-only",
+        "omit-submodules",
+        "all",
+        "quiet",
+      ];
+      delete args["_"];
+      if (!Object.keys(args).every((i) => recognizedOptions.includes(i))) {
+          error(
+              `Unrecognized option ${Object.keys(args)
+                  .filter((i) => !recognizedOptions.includes(i))
+                  .map((i) => `--${i}=${JSON.stringify(args[i])}`)
+                  .join(", ")}`
       );
     }
+      if (args["omit-submodules"] && args["omit-submodules"] != false) {
+          args["submodules"] = false;
+      } else {
+          args["submodules"] = true;
+      }
       if (
           args.output &&
-          !(args["find-orphans"] || args["mine-only"] || args["not-mine"])
-      ) {
-          error(
-              `Output cannot be used without specifying one of --find-orphans, --mine-only, or --not-mine`
-          );
+        !(
+            args["find-orphans"] ||
+            args["mine-only"] ||
+            args["not-mine"] ||
+            args["all"]
+        )
+    ) {
+        error(
+          `Output cannot be used without specifying one of --find-orphans, --mine-only, --not-mine or --all`
+      );
       }
       if (!args.output) {
           args.output = "readable";
@@ -123,67 +140,89 @@ async function main() {
       }
       log("Found username: ".green.bold + username.white.bold.underline);
       const dir = args.dir ? path.resolve(args.dir) : HOME_DIR;
-      const spinner = ora("Finding github repos...").start();
-      const repos = await findGithubRepos(dir, true, args.exclude).then(
-          async (repos) => {
-              spinner.stop();
-              const load = ora("Checking status of repos...").start();
-              let out = await Promise.all(
-                  repos.map(async (i) => {
-                      const { clean, output } = await isClean(i);
-                      const url = await getUrl(i);
-                      return { repo: i, clean, output, url };
-                  })
-              ).then((a) =>
-                  a
-                .filter((i) =>
-                    args["find-orphans"] || args["not-mine"] || args["mine-only"]
-                        ? true
-                        : !i.clean
-                )
-                .filter((i) => (args["find-orphans"] ? !i.url : i.url))
-                .map((i) => [
-                    i.repo,
-                    i.output.split("\n").map((i) => i.trim()),
-                    i.url,
-                ])
-                .sort((a, b) => b[1].length - a[1].length)
-                .map((i) => [
-                    i[0],
-                    `${i[1].length} changed file${i[1].length > 1 ? "s" : ""}`,
-                    i[2].split("/").slice(-2).join("/"),
-                ])
-                .filter((i) => {
-                if (!(args["not-mine"] || args["mine-only"])) {
-                    return true;
-                }
-                if (args["not-mine"] && args["mine-only"]) {
-                    error(
-                        `Arguments --not-mine and --mine-only can't be used together.`
-                    );
-                }
-                if (args["find-orphans"]) {
-                    error(
-                        `Error: Arguments --find-orphans and --(not-mine|mine-only) can't be used together, as --(not-mine|mine-only) depends on repos with a remote URL.`
-                    );
-                }
-                // Get a string like "Explosion-Scratch/blog"
-                const repoString = getUsername(i, true);
-                const repoUsername = repoString?.split("/")[0];
-                const out = repoUsername.toLowerCase() === username.toLowerCase();
-                return args["mine-only"] ? out : !out;
-            })
-        );
-            load.stop();
-            return out;
-        }
-    );
+      const spinner = genLoader("Finding github repos...").start();
+      const repos = await findGithubRepos(dir, {
+          top: true,
+          exclude: args.exclude,
+          submodules: args.submodules,
+      }).then(async (repos) => {
+          spinner.stop();
+        const load = genLoader("Checking status of repos...").start();
+        let out = await Promise.all(
+            repos.map(async (i) => {
+                const { clean, output } = await isClean(i);
+                const url = await getUrl(i);
+            return {
+                repo: i,
+                clean,
+                output: output
+                    .split("\n")
+                    .map((i) => i.trim())
+                    .filter((i) => i.length),
+                url,
+            };
+        })
+      ).then((a) =>
+          a
+              .filter((i) =>
+              args["find-orphans"] ||
+                  args["not-mine"] ||
+                  args["mine-only"] ||
+                  args["all"]
+                  ? true
+                  : !i.clean
+          )
+              .filter((i) =>
+                  args["all"] ? true : args["find-orphans"] ? !i.url : i.url
+              )
+              .map((i) => [i.repo, i.output, i.url, i.output])
+              .sort((a, b) => b[1].length - a[1].length)
+              .map((i) => [
+                  i[0],
+              i[1].length
+                  ? `${i[1].length} changed file${i[1].length > 1 ? "s" : ""}`
+                  : "",
+              i[2].split("/").slice(-2).join("/"),
+              i[3],
+          ])
+              .filter((i) => {
+              if (args["all"]) {
+                  return true;
+              }
+              if (!(args["not-mine"] || args["mine-only"])) {
+                  return true;
+              }
+              if (args["not-mine"] && args["mine-only"]) {
+                  error(
+                      `Arguments --not-mine and --mine-only can't be used together.`
+                  );
+              }
+              if (args["find-orphans"]) {
+                  error(
+                      `Error: Arguments --find-orphans and --(not-mine|mine-only) can't be used together, as --(not-mine|mine-only) depends on repos with a remote URL.`
+                  );
+              }
+              // Get a string like "Explosion-Scratch/blog"
+              const repoString = getUsername(i, true);
+              const repoUsername = repoString?.split("/")[0];
+              const out = repoUsername.toLowerCase() === username.toLowerCase();
+              return args["mine-only"] ? out : !out;
+          })
+      );
+        load.stop();
+        return out;
+    });
       const longestRepoName = repos.reduce(
           (a, b) => Math.max(a, b[0].split(path.sep).slice(-1)[0].length),
           0
       );
       const longestPath = repos.reduce((a, b) => Math.max(a, b[0].length), 0);
-      if (args["find-orphans"] || args["not-mine"] || args["mine-only"]) {
+      if (
+          args["find-orphans"] ||
+          args["not-mine"] ||
+          args["mine-only"] ||
+          args["all"]
+      ) {
           console.clear();
           switch (args.output) {
               case "plain":
@@ -193,26 +232,31 @@ async function main() {
                   console.log(JSON.stringify(formatRepos(repos), null, 2));
                   break;
               case "readable":
-              const message = args["find-orphans"]
-                  ? "Orphaned repos (with no origin URL)"
-                  : args["not-mine"]
-                      ? `Repos not owned by ${username}`
-                      : args["mine-only"]
-                          ? `Repos owned by ${username}`
+                  const message = args["find-orphans"]
+              ? "Orphaned repos (with no origin URL):"
+              : args["not-mine"]
+                  ? `Repos not owned by ${username}:`
+                  : args["mine-only"]
+                      ? `Repos owned by ${username}`
+                      : args["all"]
+                          ? `All repos:`
                           : `This message should never show up`;
-              console.log(message.bold.green.underline);
+              log(message.bold.green.underline);
               console.log(
                   repos
                       .map(
                           (i) =>
-                      `${i[0].padEnd(longestPath + 7, " ").bold.blue} ${`(${i[1]})`.dim.italic
-                      }${getUsername(i) ? " - " + getUsername(i) : ""}`
+                      `${i[0].padEnd(longestPath + 7, " ").bold.blue} ${!(i[1] || getUsername(i))
+                          ? `(No changes or remote)`.dim.italic
+                          : ""
+                      }${i[1] ? `(${i[1]})`.dim.italic : ""}${i[1] && getUsername(i) ? " - " : ""
+                      }${getUsername(i) ? getUsername(i) : ""}`
               )
                   .join("\n")
           );
-                  break;
-              default:
-                  console.error("Unexpected output format.");
+              break;
+          default:
+                  error("Unexpected output format: ", args.output);
                   process.exit(1);
           }
           process.exit(0);
@@ -225,7 +269,7 @@ async function main() {
           name: `${repo[0]
               .split(path.sep)
               .slice(-1)[0]
-            .bold.padEnd(longestRepoName + 10, " ")}${` - ${repo[1].italic} (${niceslice(
+            .bold.padEnd(longestRepoName + 10, " ")}${`${repo[1] ? " - " : ""}${repo[1].italic} (${niceslice(
                 repo[0].replace(process.env.HOME, "~"),
                 Math.floor(process.stdout.columns / 4)
             )} - ${repo[2].split("/")[0].toLowerCase() === username.toLowerCase()
@@ -280,29 +324,49 @@ async function main() {
           // JSON format repos
           return repos.map((i) => ({
               path: i[0],
-              filesChanged: parseInt(i[1].split(" ")[0], 10),
-              url: i[2],
-          }));
+          changedFileCount: parseInt(i[1].split(" ")[0], 10),
+          url: i[2],
+          changedFiles: i[3],
+      }));
       }
       function getUsername(repo, raw) {
-        if (raw) {
-            return repo[2];
-        }
-        if (!repo[2]?.length) {
-            return false;
-        }
-          return `${repo[2].split("/")[0].toLowerCase() === username.toLowerCase()
-                  ? repo[2].split("/")[0]
-                  : repo[2].split("/")[0].bold.blue.reset
-              }${("/" + repo[2].split("/")[1]).dim}`;
+          if (raw) {
+              return repo[2];
+          }
+          if (!repo[2]?.length) {
+              return false;
+          }
+        return `${repo[2].split("/")[0].toLowerCase() === username.toLowerCase()
+                ? repo[2].split("/")[0]
+                : repo[2].split("/")[0].bold.blue.reset
+            }${("/" + repo[2].split("/")[1]).dim}`;
+    }
+      function log(message) {
+          if (args["quiet"]) {
+              return;
+          }
+          console.log(message);
       }
-      function error(message) {
-          console.clear();
-          log(`${`Error: ${message}`.red.bold}\n\n${HELP}`);
-          process.exit(1);
+      function genLoader(message) {
+          if (args["quiet"]) {
+              return {
+                  start() {
+                      return { stop: () => { } };
+                  },
+                  stop() {
+                      return { start: () => { } };
+                  },
+              };
+          }
+          return ora(message);
       }
-  } catch (error) {
-      console.error(error.message);
+  } catch (e) {
+      error(e.message);
+  }
+    function error(message) {
+        console.clear();
+      console.log(`${`Error: ${message}`.red.bold}\n\n${HELP}`);
+      process.exit(1);
   }
 }
 

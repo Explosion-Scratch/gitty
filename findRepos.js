@@ -23,7 +23,15 @@ const HOME_BLACKLIST = [
     "micromamba",
     "dalai",
 ];
-export const findGithubRepos = async (dir, top = false, exclude = true) => {
+export const findGithubRepos = async (dir, args) => {
+    args = {
+        top: false,
+        exclude: true,
+        submodules: true,
+        ...args
+    }
+    const { top, exclude, submodules } = args;
+    args = { ...args, top: false }
     const repos = [];
     const files = await fs
         .readdir(dir)
@@ -45,9 +53,10 @@ export const findGithubRepos = async (dir, top = false, exclude = true) => {
       if (isDir) {
           const hasGit = await hasGitFolder(filePath);
           if (hasGit) {
-              repos.push(filePath);
+              const other = submodules ? (await findGithubRepos(filePath, args)) : [];
+              repos.push(filePath, ...other);
           } else {
-                repos.push(...(await findGithubRepos(filePath)));
+              repos.push(...(await findGithubRepos(filePath, args)));
             }
         }
     }
