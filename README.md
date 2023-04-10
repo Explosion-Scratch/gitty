@@ -27,7 +27,7 @@ Gitty scans your disk for GitHub repos, intelligently filters them to ones that 
 You can also use the following options:
     
 ```
-Usage: gitty [options]
+Usage: backup_all_repos [options]
 
 Options:
     --help               Show this message
@@ -35,7 +35,13 @@ Options:
     --email              Email address (used instead of "git config --get user.email" if provided)
     --dir                Directory to backup to (defaults to $HOME)
     --no-exclude         Don't exclude folders such as ~/Library, ~/.cache, .git, etc.
-```
+    --find-orphans       Find any repos that don't have a remote URL.
+    --output             Give the output in JSON, plain text or readable format. (json|plain|readable).
+    --mine-only          Only show repos owned by me
+    --not-mine           Only show repos NOT owned by me
+    --omit-submodules    Don't search for submodules in repos
+    --all                Just list all repos found
+    --quiet              Don't log anything except the output```
 
 For example, to backup all your repos to a folder called `backup` without excluding any folders, run:
     
@@ -44,6 +50,22 @@ For example, to backup all your repos to a folder called `backup` without exclud
 To backup only your GitHub repos with a specific username and email address, run:
     
     gitty --username explosion-scratch --email explosion@scratch.com 
+
+To get back a machine readable format you can do something like this:
+
+    gitty --quiet --output plain --all
+
+View repos without remote URLs (maybe you forgot to connect it to your repo):
+
+    gitty --find-orphans
+
+View all the repos you've cloned that aren't yours
+
+    gitty --not-mine
+
+Make search faster and don't search for submodules in each repo:
+
+    gitty --omit-submodules
 
 ## Features
 

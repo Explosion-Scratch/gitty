@@ -33,12 +33,12 @@ ${"Options:".bold.white}
     ${"--mine-only".bold.white}          ${`Only show repos owned by me`.italic.dim
 }
     ${"--not-mine".bold.white}           ${`Only show repos NOT owned by me`.italic.dim
-    }
+}
     ${"--omit-submodules".bold.white}    ${`Don't search for submodules in repos`.italic.dim
-    }
+}
     ${"--all".bold.white}                ${`Just list all repos found`.italic.dim
-    }
-    ${"--quiet".bold.white}             ${`Don't log anything except the output`.italic.dim
+}
+    ${"--quiet".bold.white}              ${`Don't log anything except the output`.italic.dim
 }
 
 ${`Give it a ⭐️ on GitHub if you want!`.yellow}${" - ".dim}${"@Explosion-Scratch/gitty".bold.blue
@@ -61,9 +61,6 @@ async function backupRepo(repo) {
 async function main() {
     try {
         const args = minimist(process.argv.slice(2));
-      if (args["quiet"]) {
-          HELP = "";
-      }
       const recognizedOptions = [
           "exclude",
           "dir",
@@ -74,10 +71,17 @@ async function main() {
           "output",
           "not-mine",
           "mine-only",
-        "omit-submodules",
-        "all",
-        "quiet",
+          "omit-submodules",
+          "all",
+          "quiet",
       ];
+      if (args.help === true) {
+          log(HELP);
+          process.exit(0);
+      }
+      if (args["quiet"]) {
+          HELP = "";
+      }
       delete args["_"];
       if (!Object.keys(args).every((i) => recognizedOptions.includes(i))) {
           error(
@@ -94,15 +98,15 @@ async function main() {
       }
       if (
           args.output &&
-        !(
-            args["find-orphans"] ||
-            args["mine-only"] ||
-            args["not-mine"] ||
-            args["all"]
-        )
+          !(
+              args["find-orphans"] ||
+              args["mine-only"] ||
+              args["not-mine"] ||
+              args["all"]
+          )
     ) {
         error(
-          `Output cannot be used without specifying one of --find-orphans, --mine-only, --not-mine or --all`
+            `Output cannot be used without specifying one of --find-orphans, --mine-only, --not-mine or --all`
       );
       }
       if (!args.output) {
@@ -110,10 +114,6 @@ async function main() {
       }
       if (!["plain", "json", "readable"].includes(args.output)) {
           error(`Output format must be one of 'json', 'plain', or 'readable'`);
-      }
-      if (args.help === true) {
-          log(HELP);
-          process.exit(0);
       }
       if (args.exclude === undefined) {
           args.exclude = true;
@@ -147,30 +147,30 @@ async function main() {
           submodules: args.submodules,
       }).then(async (repos) => {
           spinner.stop();
-        const load = genLoader("Checking status of repos...").start();
-        let out = await Promise.all(
-            repos.map(async (i) => {
-                const { clean, output } = await isClean(i);
-                const url = await getUrl(i);
-            return {
-                repo: i,
-                clean,
-                output: output
-                    .split("\n")
-                    .map((i) => i.trim())
-                    .filter((i) => i.length),
-                url,
-            };
+          const load = genLoader("Checking status of repos...").start();
+          let out = await Promise.all(
+              repos.map(async (i) => {
+                  const { clean, output } = await isClean(i);
+                  const url = await getUrl(i);
+                  return {
+                      repo: i,
+                      clean,
+                      output: output
+                          .split("\n")
+                          .map((i) => i.trim())
+                          .filter((i) => i.length),
+                      url,
+                  };
         })
       ).then((a) =>
           a
               .filter((i) =>
-              args["find-orphans"] ||
-                  args["not-mine"] ||
-                  args["mine-only"] ||
-                  args["all"]
-                  ? true
-                  : !i.clean
+                  args["find-orphans"] ||
+                      args["not-mine"] ||
+                      args["mine-only"] ||
+                      args["all"]
+                      ? true
+                      : !i.clean
           )
               .filter((i) =>
                   args["all"] ? true : args["find-orphans"] ? !i.url : i.url
@@ -179,34 +179,34 @@ async function main() {
               .sort((a, b) => b[1].length - a[1].length)
               .map((i) => [
                   i[0],
-              i[1].length
-                  ? `${i[1].length} changed file${i[1].length > 1 ? "s" : ""}`
-                  : "",
-              i[2].split("/").slice(-2).join("/"),
-              i[3],
+                  i[1].length
+                      ? `${i[1].length} changed file${i[1].length > 1 ? "s" : ""}`
+                      : "",
+                  i[2].split("/").slice(-2).join("/"),
+                  i[3],
           ])
               .filter((i) => {
-              if (args["all"]) {
-                  return true;
-              }
-              if (!(args["not-mine"] || args["mine-only"])) {
-                  return true;
-              }
-              if (args["not-mine"] && args["mine-only"]) {
-                  error(
-                      `Arguments --not-mine and --mine-only can't be used together.`
-                  );
-              }
-              if (args["find-orphans"]) {
-                  error(
-                      `Error: Arguments --find-orphans and --(not-mine|mine-only) can't be used together, as --(not-mine|mine-only) depends on repos with a remote URL.`
-                  );
-              }
-              // Get a string like "Explosion-Scratch/blog"
-              const repoString = getUsername(i, true);
-              const repoUsername = repoString?.split("/")[0];
-              const out = repoUsername.toLowerCase() === username.toLowerCase();
-              return args["mine-only"] ? out : !out;
+                  if (args["all"]) {
+                      return true;
+                  }
+                  if (!(args["not-mine"] || args["mine-only"])) {
+                      return true;
+                  }
+                  if (args["not-mine"] && args["mine-only"]) {
+                      error(
+                          `Arguments --not-mine and --mine-only can't be used together.`
+                      );
+                  }
+                  if (args["find-orphans"]) {
+                      error(
+                          `Error: Arguments --find-orphans and --(not-mine|mine-only) can't be used together, as --(not-mine|mine-only) depends on repos with a remote URL.`
+                      );
+                  }
+                  // Get a string like "Explosion-Scratch/blog"
+                  const repoString = getUsername(i, true);
+                  const repoUsername = repoString?.split("/")[0];
+                  const out = repoUsername.toLowerCase() === username.toLowerCase();
+                  return args["mine-only"] ? out : !out;
           })
       );
         load.stop();
@@ -233,19 +233,19 @@ async function main() {
                   break;
               case "readable":
                   const message = args["find-orphans"]
-              ? "Orphaned repos (with no origin URL):"
-              : args["not-mine"]
-                  ? `Repos not owned by ${username}:`
-                  : args["mine-only"]
-                      ? `Repos owned by ${username}`
-                      : args["all"]
-                          ? `All repos:`
-                          : `This message should never show up`;
-              log(message.bold.green.underline);
-              console.log(
-                  repos
-                      .map(
-                          (i) =>
+                      ? "Orphaned repos (with no origin URL):"
+                      : args["not-mine"]
+                          ? `Repos not owned by ${username}:`
+                          : args["mine-only"]
+                              ? `Repos owned by ${username}`
+                              : args["all"]
+                                  ? `All repos:`
+                                  : `This message should never show up`;
+                  log(message.bold.green.underline);
+                  console.log(
+                      repos
+                          .map(
+                              (i) =>
                       `${i[0].padEnd(longestPath + 7, " ").bold.blue} ${!(i[1] || getUsername(i))
                           ? `(No changes or remote)`.dim.italic
                           : ""
@@ -254,8 +254,8 @@ async function main() {
               )
                   .join("\n")
           );
-              break;
-          default:
+                  break;
+              default:
                   error("Unexpected output format: ", args.output);
                   process.exit(1);
           }
@@ -324,9 +324,9 @@ async function main() {
           // JSON format repos
           return repos.map((i) => ({
               path: i[0],
-          changedFileCount: parseInt(i[1].split(" ")[0], 10),
-          url: i[2],
-          changedFiles: i[3],
+              changedFileCount: parseInt(i[1].split(" ")[0], 10),
+              url: i[2],
+              changedFiles: i[3],
       }));
       }
       function getUsername(repo, raw) {
@@ -351,22 +351,22 @@ async function main() {
           if (args["quiet"]) {
               return {
                   start() {
-                      return { stop: () => { } };
-                  },
-                  stop() {
-                      return { start: () => { } };
-                  },
-              };
-          }
-          return ora(message);
-      }
+                return { stop: () => { } };
+            },
+            stop() {
+                    return { start: () => { } };
+                },
+            };
+        }
+        return ora(message);
+    }
   } catch (e) {
       error(e.message);
   }
     function error(message) {
         console.clear();
-      console.log(`${`Error: ${message}`.red.bold}\n\n${HELP}`);
-      process.exit(1);
+        console.log(`${`Error: ${message}`.red.bold}\n\n${HELP}`);
+        process.exit(1);
   }
 }
 
