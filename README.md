@@ -41,7 +41,8 @@ Options:
     --not-mine           Only show repos NOT owned by me
     --omit-submodules    Don't search for submodules in repos
     --all                Just list all repos found
-    --quiet              Don't log anything except the output```
+    --quiet              Don't log anything except the output
+```
 
 For example, to backup all your repos to a folder called `backup` without excluding any folders, run:
     
