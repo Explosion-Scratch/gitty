@@ -6,7 +6,7 @@
 
 <center>😸 <i>Backup all your git repos with a single command!</i></center><br><br>
 
-Gitty is a command-line tool that helps you backup all your git repositories from GitHub, GitLab, Bitbucket or any other git hosting service. It has lots of options, and is fully interactive!
+Gitty is a command-line tool that helps you backup all your git repositories from GitHub. It has lots of options, and is fully interactive!
 
 ## Installation
 
